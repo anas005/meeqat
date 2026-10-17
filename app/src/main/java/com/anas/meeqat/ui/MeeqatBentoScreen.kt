@@ -3,6 +3,12 @@ package com.anas.meeqat.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -78,6 +84,7 @@ data class MeeqatUiState(
     val searchQuery: String = "",
     val searchResults: List<SavedLocation> = emptyList(),
     val statusMessage: String? = null,
+    val locating: Boolean = false,
 )
 
 data class LocationPickerState(
@@ -109,6 +116,8 @@ fun MeeqatBentoScreen(
     onRemoveLocation: (SavedLocation) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onAddLocation: (SavedLocation) -> Unit,
+    onAddManualLocation: (String, Double, Double) -> Unit,
+    onEditLocation: (SavedLocation, String, Double, Double) -> Unit,
     onUseCurrentLocation: () -> Unit,
 ) {
     var sheetOpen by remember { mutableStateOf(false) }
@@ -223,6 +232,7 @@ fun MeeqatBentoScreen(
                 selectedLocationId = state.selected.id,
                 searchQuery = state.searchQuery,
                 searchResults = state.searchResults,
+                busy = state.locating,
                 statusMessage = state.statusMessage,
             ),
             onDismissRequest = { sheetOpen = false },
@@ -230,6 +240,8 @@ fun MeeqatBentoScreen(
             onRemove = onRemoveLocation,
             onQueryChange = onSearchQueryChange,
             onAdd = onAddLocation,
+            onAddManual = onAddManualLocation,
+            onEdit = onEditLocation,
             onUseCurrentLocation = onUseCurrentLocation,
         )
     }
@@ -243,6 +255,8 @@ fun MeeqatBentoScreen(
             onRemove: (SavedLocation) -> Unit,
             onQueryChange: (String) -> Unit,
             onAdd: (SavedLocation) -> Unit,
+            onAddManual: (String, Double, Double) -> Unit,
+            onEdit: (SavedLocation, String, Double, Double) -> Unit,
             onUseCurrentLocation: () -> Unit,
         ) {
             ModalBottomSheet(onDismissRequest = onDismissRequest, containerColor = LocalMeeqatPalette.current.surface) {
@@ -252,6 +266,8 @@ fun MeeqatBentoScreen(
                     onRemove = onRemove,
                     onQueryChange = onQueryChange,
                     onAdd = onAdd,
+                    onAddManual = onAddManual,
+                    onEdit = onEdit,
                     onUseCurrentLocation = onUseCurrentLocation,
                 )
             }
@@ -413,19 +429,21 @@ fun LocationPickerContent(
     state: LocationPickerState,
     onSelect: (SavedLocation) -> Unit, onRemove: (SavedLocation) -> Unit,
     onQueryChange: (String) -> Unit, onAdd: (SavedLocation) -> Unit,
+    onAddManual: (String, Double, Double) -> Unit,
+    onEdit: (SavedLocation, String, Double, Double) -> Unit,
     onUseCurrentLocation: () -> Unit,
 ) {
     val palette = LocalMeeqatPalette.current
+    var addOpen by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<SavedLocation?>(null) }
     LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 18.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text("Locations", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = palette.ink) }
         item {
-            Button(
-                onClick = onUseCurrentLocation,
-                enabled = !state.busy,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = palette.forest),
-                shape = RoundedCornerShape(26.dp),
-            ) { Text("Add Current Location", fontWeight = FontWeight.Bold) }
+            Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Locations", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = palette.ink, modifier = Modifier.weight(1f))
+                IconButton(onClick = { addOpen = true }, enabled = !state.busy) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add location", tint = palette.chartAccent)
+                }
+            }
         }
         items(state.locations, key = { it.id }) { loc ->
             val current = loc.id == state.selectedLocationId
@@ -437,19 +455,17 @@ fun LocationPickerContent(
                 RadioButton(selected = current, onClick = null)
                 Column(Modifier.weight(1f).padding(12.dp)) {
                     Text(loc.name, fontWeight = FontWeight.Bold, color = palette.ink)
-                    Text("%.3f, %.3f%s".format(loc.lat, loc.lon, if (loc.isDefault) " · Default" else ""), fontSize = 12.sp, color = palette.muted)
+                    Text("%.3f, %.3f".format(loc.lat, loc.lon), fontSize = 12.sp, color = palette.muted)
                 }
-                if (state.locations.size > 1) TextButton(onClick = { onRemove(loc) }, enabled = !state.busy) { Text("Remove") }
+                IconButton(onClick = { editing = loc }, enabled = !state.busy) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit ${loc.name}", tint = palette.chartAccent)
+                }
+                if (state.locations.size > 1) {
+                    IconButton(onClick = { onRemove(loc) }, enabled = !state.busy) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Remove ${loc.name}", tint = palette.chartAccent)
+                    }
+                }
             }
-        }
-        item {
-            OutlinedTextField(
-                value = state.searchQuery, onValueChange = onQueryChange, singleLine = true,
-                placeholder = { Text("Search for a city or place") },
-                enabled = !state.busy,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                shape = RoundedCornerShape(16.dp),
-            )
         }
         if (state.busy) {
             item {
@@ -461,15 +477,142 @@ fun LocationPickerContent(
         state.statusMessage?.let { message ->
             item { Text(message, fontSize = 13.sp, color = palette.muted) }
         }
-        items(state.searchResults, key = { "r-" + it.id }) { r ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(palette.background).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
-                    Text(r.name, fontWeight = FontWeight.Bold, color = palette.ink)
-                    Text("%.3f, %.3f".format(r.lat, r.lon), fontSize = 12.sp, color = palette.muted)
-                }
-                TextButton(onClick = { onAdd(r) }, enabled = !state.busy) { Text("Add") }
-            }
-        }
         item { Spacer(Modifier.height(16.dp)) }
     }
+
+    if (addOpen) {
+        LocationDialog(
+            title = "Add location",
+            initial = null,
+            busy = state.busy,
+            onDismiss = {
+                addOpen = false
+                onQueryChange("")
+            },
+            onConfirm = { name, lat, lon ->
+                addOpen = false
+                onAddManual(name, lat, lon)
+            },
+            onUseCurrentLocation = {
+                addOpen = false
+                onUseCurrentLocation()
+            },
+            searchQuery = state.searchQuery,
+            searchResults = state.searchResults,
+            onSearchQueryChange = onQueryChange,
+            onPickResult = { result ->
+                addOpen = false
+                onQueryChange("")
+                onAdd(result)
+            },
+        )
+    }
+    editing?.let { location ->
+        LocationDialog(
+            title = "Edit location",
+            initial = location,
+            busy = state.busy,
+            onDismiss = { editing = null },
+            onConfirm = { name, lat, lon ->
+                editing = null
+                onEdit(location, name, lat, lon)
+            },
+            onUseCurrentLocation = null,
+        )
+    }
+}
+
+@Composable
+private fun LocationDialog(
+    title: String,
+    initial: SavedLocation?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String, Double, Double) -> Unit,
+    onUseCurrentLocation: (() -> Unit)?,
+    searchQuery: String? = null,
+    searchResults: List<SavedLocation> = emptyList(),
+    onSearchQueryChange: ((String) -> Unit)? = null,
+    onPickResult: ((SavedLocation) -> Unit)? = null,
+) {
+    val palette = LocalMeeqatPalette.current
+    var name by remember { mutableStateOf(initial?.name.orEmpty()) }
+    var latText by remember { mutableStateOf(initial?.let { "%.6f".format(it.lat) }.orEmpty()) }
+    var lonText by remember { mutableStateOf(initial?.let { "%.6f".format(it.lon) }.orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = palette.surface,
+        title = { Text(title, color = palette.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onSearchQueryChange != null) {
+                    OutlinedTextField(
+                        value = searchQuery.orEmpty(),
+                        onValueChange = { onSearchQueryChange(it) },
+                        singleLine = true,
+                        placeholder = { Text("Search for a city or place") },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    searchResults.forEach { result ->
+                        TextButton(
+                            onClick = { onPickResult?.invoke(result) },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(result.name, fontWeight = FontWeight.Bold)
+                                Text("%.3f, %.3f".format(result.lat, result.lon), fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; error = null },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = latText,
+                    onValueChange = { latText = it; error = null },
+                    label = { Text("Latitude") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = lonText,
+                    onValueChange = { lonText = it; error = null },
+                    label = { Text("Longitude") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+                if (onUseCurrentLocation != null) {
+                    TextButton(onClick = onUseCurrentLocation, enabled = !busy) {
+                        Text(if (busy) "Getting location…" else "Use current location")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val lat = latText.trim().toDoubleOrNull()
+                val lon = lonText.trim().toDoubleOrNull()
+                when {
+                    name.isBlank() -> error = "Enter a name."
+                    lat == null || lat !in -90.0..90.0 -> error = "Latitude must be between -90 and 90."
+                    lon == null || lon !in -180.0..180.0 -> error = "Longitude must be between -180 and 180."
+                    else -> onConfirm(name.trim(), lat, lon)
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

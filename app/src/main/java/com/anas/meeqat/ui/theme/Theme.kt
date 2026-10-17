@@ -8,7 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPalette.forest,
+    primary = DarkPalette.chartAccent,
     onPrimary = DarkPalette.ink,
     secondary = DarkPalette.sun,
     onSecondary = DarkPalette.background,

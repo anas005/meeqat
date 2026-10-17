@@ -3,7 +3,7 @@
 ![Latest release](https://img.shields.io/github/v/release/anas005/meeqat)
 
 Sun and moon times for Android, as an app and two home-screen widgets.
-Everything is calculated on the phone, so it works offline and needs no internet
+Prayer and sun/moon times are calculated on the phone, so they work offline
 
 <table>
   <tr>
@@ -29,7 +29,7 @@ Everything is calculated on the phone, so it works offline and needs no internet
 ## Download
 
 - Get the latest APK from the [Releases](https://github.com/anas005/meeqat/releases) page.
-- Requires Android 8.0 (API 26) or newer and Google Play services (used to get your location).
+- Requires Android 8.0 (API 26) or newer.
 
 ## Build from source
 
@@ -42,6 +42,12 @@ cd meeqat
 ```
 
 The debug APK is written to `app/build/outputs/apk/debug/`.
+
+## Privacy
+
+- Location is read only when you tap "Use current location", using Android's built-in location manager (GPS or network). It does not need Google Play services.
+- Place names you search for are sent to the Photon geocoding service (photon.komoot.io).
+- The name of your current location is looked up with Android's Geocoder, which may use the device's own location service.
 
 ## Accuracy and disclaimer
 

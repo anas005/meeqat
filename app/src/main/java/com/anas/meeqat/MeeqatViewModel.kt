@@ -158,6 +158,26 @@ class MeeqatViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun onAddManualLocation(name: String, lat: Double, lon: Double) {
+        onAddLocation(SavedLocation(id = "", name = name, lat = lat, lon = lon))
+    }
+
+    fun onEditLocation(location: SavedLocation, name: String, lat: Double, lon: Double) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val zoneId = LocationTimeZone.timeZoneId(appContext, lat, lon)
+                    LocationStore.update(appContext, location.id, name, lat, lon, zoneId)
+                }
+                refreshLocationState(_uiState.value.selected.id)
+                updateWidgets()
+            } catch (error: Exception) {
+                Log.e(TAG, "Couldn't edit location ${location.name}", error)
+                _uiState.update { it.copy(statusMessage = "Couldn't update this location.") }
+            }
+        }
+    }
+
     fun onSearchQueryChange(query: String) {
         _uiState.update { it.copy(searchQuery = query, searchResults = emptyList(), statusMessage = null) }
         searchQueries.value = query
@@ -177,7 +197,7 @@ class MeeqatViewModel(application: Application) : AndroidViewModel(application) 
                         statusMessage = if (result.alreadySaved) {
                             "${result.place.name} is already saved."
                         } else {
-                            "${result.place.name} added."
+                            null
                         },
                     )
                 }
@@ -191,6 +211,7 @@ class MeeqatViewModel(application: Application) : AndroidViewModel(application) 
     /** Call only after the Activity has confirmed fine or coarse location permission. */
     fun onUseCurrentLocation() {
         viewModelScope.launch {
+            _uiState.update { it.copy(locating = true, statusMessage = null) }
             try {
                 val candidate = LocationResolver.current(appContext)
                 val saved = withContext(Dispatchers.IO) {
@@ -205,8 +226,15 @@ class MeeqatViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 refreshLocationState(saved.id)
                 updateWidgets()
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 Log.e(TAG, "Couldn't update the current location", error)
+                _uiState.update {
+                    it.copy(statusMessage = error.message ?: "Couldn't update the current location.")
+                }
+            } finally {
+                _uiState.update { it.copy(locating = false) }
             }
         }
     }
@@ -220,7 +248,7 @@ class MeeqatViewModel(application: Application) : AndroidViewModel(application) 
                 .collectLatest { query ->
                     if (query.isBlank()) return@collectLatest
                     val results = try {
-                        LocationResolver.search(appContext, query).mapIndexed { index, candidate ->
+                        LocationResolver.search(query).mapIndexed { index, candidate ->
                             SavedLocation(
                                 id = "search:$index:${candidate.lat}:${candidate.lon}",
                                 name = candidate.name,

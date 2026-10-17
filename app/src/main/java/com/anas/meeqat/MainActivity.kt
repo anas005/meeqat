@@ -164,6 +164,8 @@ private fun MainBentoScreen(
         onRemoveLocation = viewModel::onRemoveLocation,
         onSearchQueryChange = viewModel::onSearchQueryChange,
         onAddLocation = viewModel::onAddLocation,
+        onAddManualLocation = viewModel::onAddManualLocation,
+        onEditLocation = viewModel::onEditLocation,
         onUseCurrentLocation = ::useCurrentLocation,
     )
 }
@@ -272,7 +274,7 @@ private fun WidgetLocationSetupScreen(
         } else {
             delay(350)
             try {
-                searchResults = LocationResolver.search(context, query).mapIndexed { index, candidate ->
+                searchResults = LocationResolver.search(query).mapIndexed { index, candidate ->
                     SavedLocation(
                         id = "search:$index:${candidate.lat}:${candidate.lon}",
                         name = candidate.name,
@@ -313,6 +315,21 @@ private fun WidgetLocationSetupScreen(
         }
     }
 
+    fun addManualLocation(name: String, lat: Double, lon: Double) {
+        addLocation(SavedLocation(id = "", name = name, lat = lat, lon = lon))
+    }
+
+    fun editLocation(location: SavedLocation, name: String, lat: Double, lon: Double) {
+        runLocationAction {
+            withContext(Dispatchers.IO) {
+                val zoneId = LocationTimeZone.timeZoneId(context, lat, lon)
+                LocationStore.update(context, location.id, name, lat, lon, zoneId)
+            }
+            refreshLocations()
+            updateWidgets()
+        }
+    }
+
     fun removeLocation(location: SavedLocation) {
         runLocationAction {
             withContext(Dispatchers.IO) { LocationStore.remove(context, location.id) }
@@ -350,6 +367,8 @@ private fun WidgetLocationSetupScreen(
             onRemove = ::removeLocation,
             onQueryChange = { searchQuery = it; status = null },
             onAdd = ::addLocation,
+            onAddManual = ::addManualLocation,
+            onEdit = ::editLocation,
             onUseCurrentLocation = ::requestCurrentLocation,
         )
     }

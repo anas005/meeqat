@@ -119,6 +119,21 @@ object LocationStore {
         return updated
     }
 
+    fun update(
+        context: Context,
+        placeId: String,
+        name: String,
+        lat: Double,
+        lon: Double,
+        timeZoneId: String?,
+    ): Place {
+        val places = all(context)
+        val existing = places.firstOrNull { it.id == placeId } ?: throw IllegalArgumentException("Unknown location")
+        val updated = existing.copy(name = name, lat = lat, lon = lon, timeZoneId = timeZoneId)
+        saveAll(preferences(context), places.map { if (it.id == placeId) updated else it })
+        return updated
+    }
+
     fun setDefault(context: Context, placeId: String) {
         require(all(context).any { it.id == placeId }) { "Unknown location" }
         preferences(context).edit().putString(KEY_DEFAULT_ID, placeId).apply()
